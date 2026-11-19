@@ -1,5 +1,8 @@
 {
   "imports": {
     "@slack/bolt": "npm:@slack/bolt@^5.1.0"
-  }
+  },
+  "unstable": [
+    "cron"
+  ]
 }
