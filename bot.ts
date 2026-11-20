@@ -30,10 +30,10 @@ async function respond() {
 async function respondToIssue() {
     let request;
     request = await fetch(
-        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issues`,    {method: "POST",
-        headers: {
+        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issues`,    {
             method: "POST",
-            // "Authorisation": password
+            headers: {
+            "Authorisation": nation,
             "X-Password": password
         }
     });
@@ -41,6 +41,15 @@ async function respondToIssue() {
 }
 
 async function fetchDailyIssues() {
-
+    await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issues`, {
+        method: "POST",
+        headers: {
+            "Authorisation": nation,
+            "X-Password": password
+        }
+    })
 }
 
+Deno.cron("daily issues", "0 0 * * *", async () => {
+    await fetchDailyIssues();
+});
