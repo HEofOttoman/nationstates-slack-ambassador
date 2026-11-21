@@ -5,6 +5,7 @@ const botToken = process.env.BOT_TOKEN;
 const appToken = process.env.APP_TOKEN;
 const password: string = process.env.PASSWORD ?? "";
 const nation=`democratic_republic_of_hack_club`;
+const userAgent = `${nation}, ${process.env.USER_AGENT}`;
 
 if ( !botToken ) { // Missing env safeguard
   throw new Error("Missing environment variables. Check for your bot & app tokens.");
@@ -16,19 +17,35 @@ const app = new App({
   socketMode: true,
 });
 
-async function getNation() {
-    let response;
-    response = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
+// response shape of one of many from one like https://www.nationstates.net/cgi-bin/api.cgi?nation=testlandia
+interface nationStates{
+    name: string;
+    type: string;
+    motto: string;
+    category: string;
+    unstatus: string;
+    endorsements: string;
+    issues_answered: string;
 
+}
+
+async function getNation() {
+    try {
+        const response = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
+        const body= response.text()
+        console.log(await body);
+        return body;
+    } catch (error) { 
+        console.log("error fetching nation:", error);
+        return error;
+    }
     // console.log(await response.text());
-    console.log(response);
-    return response;
 }
 
 app.command("/nationstates", async ({ command, ack, respond }) => {
     try{await ack();
     const payload = await getNation() ?? "error 🥀";
-    await respond({ text: `${payload}` })
+    await respond({ text: JSON.stringify(payload) })
     }catch (error) {console.log(error);}
 });
 
@@ -54,7 +71,8 @@ async function fetchDailyIssues() {
     await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issues`, {
         method: "POST",
         headers: {
-            "Authorisation": nation,
+            // "Authorisation": nation,
+            "Authorisation": userAgent,
             "X-Password": password
         }
     });
