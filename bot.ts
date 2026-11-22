@@ -1,17 +1,19 @@
 import { App } from "@slack/bolt";
 import process from "node:process";
 import "@std/dotenv/load"; // need otherwise "Missing environment variables. Check for your bot & app tokens." this is deprecated though
+import { parse } from "jsr:@libs/xml";
 const botToken = process.env.BOT_TOKEN;
 const appToken = process.env.APP_TOKEN;
 const password: string = process.env.PASSWORD ?? "";
 const nation=`democratic_republic_of_hack_club`;
 const userAgent = `${nation}, ${process.env.USER_AGENT}`;
+let isLoggedIn = false;
 
 if ( !botToken ) { // Missing env safeguard
   throw new Error("Missing environment variables. Check for your bot & app tokens.");
 }
 
-const app = new App({
+export const app = new App({
   token: botToken,
   appToken: appToken,
   socketMode: true,
@@ -19,45 +21,50 @@ const app = new App({
 
 // response shape of one of many from one like https://www.nationstates.net/cgi-bin/api.cgi?nation=testlandia
 interface nationStates{
-    name: string;
-    type: string;
-    motto: string;
-    category: string;
-    unstatus: string;
-    endorsements: string;
-    issues_answered: string;
+    NATION: {
+        NAME: string;
+        TYPE: string;
+        MOTTO: string;
+        CATEGORY: string;
+        UNSTATUS: string;
+        ENDORSEMENTS: string;
+        ISSUES_ANSWERED: string;
+    }
 
 }
 
-async function getNation() {
+async function getNation(): Promise<nationStates| null> {
     try {
         const response = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
+        
         const body= response.text()
         console.log(await body);
-        return body;
+        const parsed: nationStates = parse(await body) as unknown as nationStates;
+        return parsed;
     } catch (error) { 
         console.log("error fetching nation:", error);
-        return error;
+        return null as unknown as nationStates;
     }
     // console.log(await response.text());
 }
 
 app.command("/nationstates", async ({ command, ack, respond }) => {
     try{await ack();
-    const payload = await getNation() ?? "error 🥀";
-    await respond({ text: JSON.stringify(payload) })
+    const payload = await getNation() ?? {NATION: {NAME: "null"}};
+    // const name = payload.NATION.NAME;
+    await respond({ text: JSON.stringify(payload.NATION.NAME) })
     }catch (error) {console.log(error);}
 });
 
 async function respond() {
     let request;
-    request = await fetch(`https://example.com`);
+    request = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
 }
 
-async function respondToIssue() {
+async function respondToIssue(issueId: string) {
     let request;
     request = await fetch(
-        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issues`,    {
+        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issue&id${issueId}`,    {
             method: "POST",
             headers: {
             "Authorisation": nation,
@@ -97,22 +104,36 @@ async function sendMessage(channelId: string, message: string) {
 };
 
 async function reactToMessage(channel: string, emojiName: string, timestamp: string) {
-    await app.client.reactions.add({
+    const response = await app.client.reactions.add({
         channel: channel,
         name: emojiName,
         timestamp: timestamp
     })
+    
+    const reactions = await response;
+
 }
 
 async function readReactions(channel: string, timestamp: string) {
-    await app.client.reactions.get({
+    const response = await app.client.reactions.get({
         channel: channel,
         timestamp: timestamp
     });
+    const reactions = await response.message?.reactions || [];
+
+    for (const reaction of reactions) {
+        console.log(reaction.name, reaction.count)
+    }
 }
 
 async function login() {
-    const response = await fetchNotifications();
+    if (isLoggedIn == false) {
+        // const response = await fetchNotifications();
+        // const response = await fetchNotifications();
+        isLoggedIn = true;
+    } else {
+        return
+    }
     // response
 }
 

@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@libs/xml": "jsr:@libs/xml@^8.0.1",
     "@slack/bolt": "npm:@slack/bolt@^5.1.0",
     "@std/dotenv": "jsr:@std/dotenv@^0.225.8"
   },
