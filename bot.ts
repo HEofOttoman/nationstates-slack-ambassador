@@ -12,6 +12,9 @@ let storedIssues = {};
 let loginPin: string  = '4'; // placeholder number. dodgy null type guard
 let autologin: string | null = 'default';
 
+const legislationUsergroup = process.env.USERGROUP; // people who can vote
+// import { Database } from "jsr:@db/sqlite";
+
 if ( !botToken ) { // Missing env safeguard
   throw new Error("Missing environment variables. Check for your bot & app tokens.");
 }
@@ -43,7 +46,7 @@ interface nationStates{
 // ? fixed, marks as optional 
 }
 
-async function getNation(): Promise<nationStates| null> { // dodgy comment
+async function getNation(requestedNation: string): Promise<nationStates| null> { // dodgy comment
     try {
         const response = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
         const body= response.text()
@@ -59,11 +62,15 @@ async function getNation(): Promise<nationStates| null> { // dodgy comment
 
 app.command("/nationstates", async ({ command, ack, respond }) => {
     try{await ack();
-    const payload = await getNation() ?? {NATION: {NAME: "null"}};
+    const rawArgs = command.text.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+    // Strip the surrounding quotes
+    const args = rawArgs.map(arg => arg.replace(/^["']|["']$/g, '')); // regex from googlai to add options since slack doesnt do this natively it seems 🥀
+
+    const payload = await getNation(`placeholder`) ?? {NATION: {NAME: "null"}};
     // const name = payload.NATION.NAME;
     await respond(
-        { text: `__*#${JSON.stringify(payload.NATION.NAME)}*__\n 
-        *Type*: ${JSON.stringify(payload.NATION.TYPE)} \n 
+        { text: `__${String(payload.NATION.NAME)}__ \n
+        *Type*: ${JSON.stringify(payload.NATION.TYPE)} 
         *Category*: ${JSON.stringify(payload.NATION.CATEGORY)}
         *Motto*: ${JSON.stringify(payload.NATION.MOTTO)}
         *UN Status*: ${JSON.stringify(payload.NATION.UNSTATUS)}
@@ -103,20 +110,69 @@ app.command("/national-notifs", async ({ command, ack, respond }) => {
 });
 
 app.command("/national-issues", async ({command, ack, respond}) => {
-    try {
-        const issues = await fetchIssues();
-        respond({text: issues})
+    try {await ack(); // was causing issues
+        const rawIssues :any = await fetchIssues();
+        // respond({text: issues})
+        const issues = await parseIssues(rawIssues); // ah ofc I have to parse it first
 
+        for (const issueItem of issues) {
+            // if (issue.nation.id = isInDatabase) {} =
+            console.log(`Issue #${issueItem.id}: ${issueItem.title} `); 
+            // <insert blocks for each issue here>
+
+            console.log(issueItem.id);
+            for (const opt of issueItem.options) {
+                console.log(`Option #${opt.id}: ${opt.text} `);
+            }
+        }
+        
+        respond({text: await JSON.stringify(await parseIssues(rawIssues))})
+        
     } catch (error) {   console.error(error);   }
 })
-// async function respond() {
-//     let request;
-//     request = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
-// }
+
+interface nationIssue {
+    // issueId: string;
+        id: string; // id has to be string. goes for everything below as well
+        title: string;
+        text: string;
+        author: string;
+        editor?: string;
+        pictures: string[];
+        // pic1: string;
+        // pic2: string;
+        newspaper?: string
+        // OPTION_0: string;
+        options: Array<{id: String, text: string}>
+}
+
+const XMLtoArray = <T>(val: T | T[] | null | undefined ): T[] => !val ? [] :Array.isArray(val)? val: [val]; // something to parse xml as array idk from google
+export async function parseIssues(XML: string): Promise<nationIssue[]> {
+    const raw : any = parse(XML) as unknown;
+    const rawIssues = await XMLtoArray(raw?.NATION?.ISSUES?.ISSUE)
+    const parsedIssues = rawIssues.map((issue: any) =>({
+        // id: String(issue.NAME),
+        id: String(issue["@id"]), // @ is the one confirmed to work
+        // id: String(issue["#id"]),
+        title: String(issue.TITLE),
+        text: String(issue.TEXT),
+        author: String(issue.AUTHOR),
+        // editor: String(issue.EDITOR),
+        pictures: [issue.PIC1, issue.PIC2].filter(Boolean),
+        newspaper: String(issue.NEWSPAPER),
+        options: XMLtoArray(issue.OPTION).map((opt: any) => ({ // yea idk
+            // id: String(opt.ID ?? ""),
+            id: String(opt["@id"] ?? [""]),
+            // id: String(opt["#id"] ?? [""]),
+            // text: String(opt.TEXT ?? "")
+            text: String(opt["#text"] ?? [""])
+        }))
+    }));
+    return parsedIssues;
+}
 
 async function respondToIssue(issueId: string, chosenOption: number) {
-    let request;
-    request = await fetch(
+    const request = await fetch(
         // `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issue&id${issueId}`,    {
         `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&c=issue&id=${issueId}&option=${chosenOption}`,    {
             method: "POST",
@@ -135,16 +191,18 @@ async function fetchIssues() {
         method: "GET",
         headers: {
             // "Authorisation": nation,
-            // "Authorisation": userAgent, // confirmed to fail, delete next commit
-            "User-Agent": userAgent,
+            "Authorisation": userAgent, // actually not
+            // "User-Agent": userAgent,
             "X-Password": password,
         }
     });
     const issueBody = await response.text();
-    console.log(response);
+    // console.log(response);
     return issueBody;
 }
 
+async function fetchNotices(){ const noticeResponse = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=notices`,
+    {method:"GET",headers:{"User-Agent": userAgent, "X-Password": password}}); const body=await noticeResponse.text(); return body;}
 async function fetchNotifications() { //unread rn
     const notificationResponse = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=unread`, { 
         method: "GET",
