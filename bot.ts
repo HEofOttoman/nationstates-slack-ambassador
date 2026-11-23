@@ -8,6 +8,9 @@ const password: string = process.env.PASSWORD ?? "";
 const nation=`democratic_republic_of_hack_club`;
 const userAgent = `${nation}, ${process.env.USER_AGENT}`;
 let isLoggedIn = false;
+let storedIssues = {};
+let loginPin: string  = '4'; // placeholder number. dodgy null type guard
+let autologin: string = 'default';
 
 if ( !botToken ) { // Missing env safeguard
   throw new Error("Missing environment variables. Check for your bot & app tokens.");
@@ -33,10 +36,9 @@ interface nationStates{
 
 }
 
-async function getNation(): Promise<nationStates| null> {
+async function getNation(): Promise<nationStates| null> { // dodgy comment
     try {
         const response = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
-        
         const body= response.text()
         console.log(await body);
         const parsed: nationStates = parse(await body) as unknown as nationStates;
@@ -61,10 +63,11 @@ async function respond() {
     request = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}`);
 }
 
-async function respondToIssue(issueId: string) {
+async function respondToIssue(issueId: string, chosenOption: number) {
     let request;
     request = await fetch(
-        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issue&id${issueId}`,    {
+        // `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=issue&id${issueId}`,    {
+        `https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&c=issue&id=${issueId}&option=${chosenOption}`,    {
             method: "POST",
             headers: {
             "Authorisation": nation,
@@ -86,13 +89,16 @@ async function fetchDailyIssues() {
 }
 
 async function fetchNotifications() {
-    await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=unread`, { 
+    const notificationResponse = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=unread`, { 
         method: "POST",
         headers: {
-            "Authorisation": nation,
+            // "Authorisation": nation,
+            "User-Agent": userAgent,
             "X-Password": password
         }
     });
+    console.log(notificationResponse.headers.get("X-Autologin"))
+
 }
 // curl -H "X-Password: hunter2" -A "UserAgent Example" "https://www.nationstates.net/cgi-bin/api.cgi?nation=testlandia&q=unread"
 
@@ -130,7 +136,27 @@ async function login() {
     if (isLoggedIn == false) {
         // const response = await fetchNotifications();
         // const response = await fetchNotifications();
+        try {
+        const loginResponse = await fetch(`https://www.nationstates.net/cgi-bin/api.cgi?nation=${nation}&q=ping`, { // ping request
+            method: "GET",
+            headers: {
+            "User-Agent": userAgent,
+            // "Authorisation": userAgent,
+            // "X-Password": password
+            "X-Pin": loginPin
+        }});
+        
+        if (!loginResponse.ok) throw new Error(`HTTP Error: ${loginResponse.status}`);
+
+        let autologin = loginResponse.headers.get("X-Autologin");
+        if (loginPin == loginResponse.headers.get("X-Pin")) {
+            return
+        } else {
+            loginPin = loginResponse.headers.get("X-Pin") ?? '4', console.log("error response is null");
+        }
+        // loginPin = loginResponse.headers.get("X-Pin") || '4';
         isLoggedIn = true;
+        } catch (error) {   console.log(error);  }
     } else {
         return
     }
